@@ -4,8 +4,8 @@ This library provides a STM32 Arduino CAN driver for the NMEA2000 library.
 
 Library is under test. I have tested is with a DevEBox STM32F407VGT6 board. Fast packet frame order is preserved and it takes care of the frame priority when moving frames into the mailboxes. The library uses interrupts for sending and receiving.
 
-This library is mainly a merge of these repositories:
-https://github.com/pazi88/STM32_CAN
+This library is mainly a merge of these repositories: <br>
+https://github.com/pazi88/STM32_CAN <br>
 https://github.com/ttlappalainen/NMEA2000_Teensyx
 
 ## How to use.

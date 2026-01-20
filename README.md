@@ -1,4 +1,4 @@
-# NMEA2000_STM32
+# NMEA2000_STM32X
 
 This library provides a STM32 Arduino CAN driver for the NMEA2000 library.
 
@@ -18,9 +18,9 @@ to same folder with sketch and haven `#define HAL_CAN_MODULE_ENABLED` there.
 
     #include <NMEA2000.h>
     #include <N2kMessages.h>
-    #include <NMEA2000_STM32.h>
+    #include <NMEA2000_STM32X.h>
 
-    tNMEA2000 &NMEA2000 = *(new tNMEA2000_STM32(PB_8, PB_9));
+    tNMEA2000 &NMEA2000 = *(new tNMEA2000_STM32X(PB_8, PB_9));
 
     void setup() {
       NMEA2000.Open();

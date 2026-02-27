@@ -212,8 +212,8 @@ bool tNMEA2000_STM32X::CANSendFrame(unsigned long id, unsigned char len, const u
     if (msg)
     {
       msg->id = id;
-      msg->len = TxHeader.DLC;
-      memcpy(msg->buf, buf, TxHeader.DLC);
+      msg->len = dlc;
+      memcpy(msg->buf, buf, dlc);
     }
 #if defined(STMCANDEBUG)
     Serial.printf("  frame buffered\n");
@@ -260,25 +260,16 @@ bool tNMEA2000_STM32X::sendFromTxRing()
 #endif
 
     CAN_TxHeaderTypeDef TxHeader;
-    CAN_message_t tmp = *txMsg;
 
-    TxHeader.ExtId = tmp.id;
+    TxHeader.ExtId = txMsg->id;
     TxHeader.IDE = CAN_ID_EXT;
 
-    if (tmp.flags.remote == 1) // Remote frame when CAN_tx_msg.flags.remote is 1
-    {
-      TxHeader.RTR = CAN_RTR_REMOTE;
-      TxHeader.DLC = 0;
-    }
-    else
-    {
-      TxHeader.RTR = CAN_RTR_DATA;
-      TxHeader.DLC = tmp.len;
-    }
+    TxHeader.RTR = CAN_RTR_DATA;
+    TxHeader.DLC = txMsg->len;
 
     TxHeader.TransmitGlobalTime = DISABLE;
     uint32_t TxMailbox;
-    if (HAL_CAN_AddTxMessage(&_can.handle, &TxHeader, tmp.buf, &TxMailbox) != HAL_OK)
+    if (HAL_CAN_AddTxMessage(&_can.handle, &TxHeader, txMsg->buf, &TxMailbox) != HAL_OK)
     {
 #if defined(STMCANDEBUG)
       Serial.println("sendFromTxRing failed");
@@ -326,7 +317,7 @@ bool tNMEA2000_STM32X::CANGetFrame(unsigned long &id, unsigned char &len, unsign
     unsigned char src;
     unsigned char dst;
     CanIdToN2k(id, prio, pgn, src, dst);
-    Serial.printf("%6lu - tNMEA2000_Teensyx::CANGetFrame pgn:%6lu, prio:%u, src:%u, dst:%u, data:%02X\n", millis(), pgn, prio, src, dst, buf[0]);
+    Serial.printf("%6lu - NMEA2000_STM32X::CANGetFrame pgn:%6lu, prio:%u, src:%u, dst:%u, data:%02X\n", millis(), pgn, prio, src, dst, buf[0]);
   }
 #endif
 
@@ -352,7 +343,7 @@ void tNMEA2000_STM32X::InitCANFrameBuffers()
   }
   if (txRing1 != 0 && txRing1->getSize() != MaxCANSendFrames)
   {
-    delete rxRing1;
+    delete txRing1;
     txRing1 = 0;
   }
 
@@ -708,7 +699,7 @@ bool tNMEA2000_STM32X::addToRingBuffer(const CAN_message_t &msg)
     return true;
   }
 
-  return (true);
+  return false;
 }
 
 void tNMEA2000_STM32X::setBaudRateValues(uint16_t prescaler, uint8_t timeseg1,

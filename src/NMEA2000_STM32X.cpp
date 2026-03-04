@@ -619,17 +619,17 @@ void tNMEA2000_STM32X::applyFilter()
 
   HAL_FDCAN_ConfigGlobalFilter(&hcan_,
                                FDCAN_FILTER_REJECT,
-                               FDCAN_FILTER_REJECT, 
+                               FDCAN_FILTER_REJECT,
                                FDCAN_FILTER_REMOTE,
                                FDCAN_FILTER_REMOTE);
 
   FDCAN_FilterTypeDef filter = {
       .IdType = FDCAN_EXTENDED_ID,
       .FilterIndex = 0,
-      .FilterType = FDCAN_FILTER_RANGE, 
+      .FilterType = FDCAN_FILTER_RANGE,
       .FilterConfig = FDCAN_FILTER_TO_RXFIFO0,
       .FilterID1 = 0x0000000,
-      .FilterID2 = 0x1FFFFFFF, 
+      .FilterID2 = 0x1FFFFFFF,
   };
   HAL_FDCAN_ConfigFilter(&hcan_, &filter);
 
@@ -826,7 +826,7 @@ void tNMEA2000_STM32X::disableMBInterrupts()
 
 uint32_t tNMEA2000_STM32X::getCanPeripheralClock()
 {
-  return HAL_RCC_GetPCLK1Freq(); // bxCAN clock is APB1/PCLK1 
+  return HAL_RCC_GetPCLK1Freq(); // bxCAN clock is APB1/PCLK1
 }
 
 void tNMEA2000_STM32X::setBaudRateValues(uint16_t prescaler, uint8_t timeseg1,
@@ -1010,13 +1010,15 @@ bool tNMEA2000_STM32X::calculateBaudrate(int baud)
 void tNMEA2000_STM32X::subscribe()
 {
   HAL_FDCAN_ActivateNotification(&hcan_, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
-  HAL_FDCAN_ActivateNotification(&hcan_, FDCAN_IT_TX_COMPLETE, 0x7);
+  HAL_FDCAN_ActivateNotification(&hcan_, FDCAN_IT_TX_COMPLETE, 0x07);
+  HAL_FDCAN_ActivateNotification(&hcan_, FDCAN_IT_BUS_OFF, 0);
 }
 
 void tNMEA2000_STM32X::unsubscribe()
 {
   HAL_FDCAN_DeactivateNotification(&hcan_, FDCAN_IT_RX_FIFO0_NEW_MESSAGE);
   HAL_FDCAN_DeactivateNotification(&hcan_, FDCAN_IT_TX_COMPLETE);
+  HAL_FDCAN_DeactivateNotification(&hcan_, FDCAN_IT_BUS_OFF);
 }
 
 #if defined(RCC_PERIPHCLK_FDCAN)
@@ -1165,6 +1167,17 @@ static uint32_t dlcToLength(uint32_t dlc)
 // --- FDCAN -----------------------------------------------------------------
 #if defined(STM32X_USE_FDCAN)
 
+extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs)
+{
+  FDCAN_ProtocolStatusTypeDef protocol_status;
+  HAL_FDCAN_GetProtocolStatus(hfdcan, &protocol_status);
+
+  if (protocol_status.BusOff != 0) // If Bus-Off error occurred
+  {
+    CLEAR_BIT(hfdcan->Instance->CCCR, FDCAN_CCCR_INIT); // Clear INIT bit to recover from Bus-Off
+  }
+}
+
 extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *FDCanHandle,
                                                    uint32_t BufferIndexes)
 {
@@ -1210,7 +1223,14 @@ extern "C" void FDCAN1_IT0_IRQHandler(void)
 
 extern "C" void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef *hfdcan)
 {
+
+#if defined(__HAL_RCC_FDCAN1_CLK_ENABLE)
   __HAL_RCC_FDCAN1_CLK_ENABLE();
+#elif defined(__HAL_RCC_FDCAN_CLK_ENABLE)
+  __HAL_RCC_FDCAN_CLK_ENABLE();
+#elif
+#error "FDCAN Clock Enable for this platform is not defined"
+#endif
 
   HAL_NVIC_SetPriority(FDCAN1_IT0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(FDCAN1_IT0_IRQn);

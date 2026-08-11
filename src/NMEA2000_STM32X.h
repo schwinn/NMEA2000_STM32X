@@ -165,7 +165,11 @@ public:
                            unsigned char *buf) override;
 
   // --- Lifecycle -----------------------------------------------------------
-  void begin();
+  // begin() returns false if the underlying HAL CAN/FDCAN peripheral failed
+  // to initialize (bad pin mapping, peripheral already in use, or a HAL
+  // init/start error) so CANOpen() can report failure instead of silently
+  // reporting success while CAN never actually came up.
+  bool begin();
   void end();
 
   // --- ISR interface (must remain public) ----------------------------------
@@ -195,6 +199,10 @@ public:
 #if defined(STM32X_USE_FDCAN)
   // --- FDCAN: handle must be public so that external ISR wrappers can access it --
   static FDCAN_HandleTypeDef hcan_;
+
+  bool getFDCANErrorCounters(uint8_t &tec, uint8_t &rec);
+
+
 #endif
 
 protected:

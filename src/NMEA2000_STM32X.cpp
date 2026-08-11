@@ -139,6 +139,22 @@ tNMEA2000_STM32X::tNMEA2000_STM32X(CAN_TypeDef *canPort)
 FDCAN_HandleTypeDef tNMEA2000_STM32X::hcan_ = {};
 static tNMEA2000_STM32X *g_canInstance = nullptr;
 
+bool tNMEA2000_STM32X::getFDCANErrorCounters(uint8_t &tec, uint8_t &rec)
+{
+
+  FDCAN_ErrorCountersTypeDef errorCounters;
+
+  if (HAL_FDCAN_GetErrorCounters(&hcan_, &errorCounters) == HAL_OK)
+  {
+    tec = errorCounters.TxErrorCnt; // Transmit Error Counter
+    rec = errorCounters.RxErrorCnt; // Receive Error Counter
+
+    return true;
+  }
+
+  return false;
+}
+
 #endif // STM32X_USE_FDCAN
 
 // ===========================================================================
@@ -168,8 +184,7 @@ bool tNMEA2000_STM32X::CANOpen()
 {
   if (IsOpen)
     return true;
-  IsOpen = true;
-  begin();
+  IsOpen = begin();
   return IsOpen;
 }
 
@@ -250,6 +265,7 @@ bool tNMEA2000_STM32X::CANSendFrame(unsigned long id, unsigned char len,
 #endif
 
   bool sendFromBuffer = false;
+  bool queueFull = false;
   if (!txRing1->isEmpty() || mailboxBusy)
   {
     CAN_message_t *msg = txRing1->getAddRef(prio);
@@ -258,12 +274,20 @@ bool tNMEA2000_STM32X::CANSendFrame(unsigned long id, unsigned char len,
       msg->id = id;
       msg->len = dlc;
       memcpy(msg->buf, buf, dlc);
+      sendFromBuffer = true;
     }
-    sendFromBuffer = true;
+    else
+    {
+      // Ring buffer full: drop this frame rather than send it directly,
+      // which would risk delivering it out of order ahead of frames
+      // already queued (fast-packet messages must stay in sequence).
+      // Report failure instead of silently discarding it as success.
+      queueFull = true;
+    }
   }
 
-  bool result = true;
-  if (!mailboxBusy)
+  bool result = !queueFull;
+  if (!mailboxBusy && !queueFull)
   {
     if (sendFromBuffer)
     {
@@ -432,7 +456,7 @@ void tNMEA2000_STM32X::init()
 // ===========================================================================
 //  begin() / end()
 // ===========================================================================
-void tNMEA2000_STM32X::begin()
+bool tNMEA2000_STM32X::begin()
 {
 #if defined(STM32X_USE_FDCAN)
 #if defined(STMCANDEBUG)
@@ -440,7 +464,9 @@ void tNMEA2000_STM32X::begin()
 #endif
 
   if (started_)
-    return; // Can be called only once
+    return true; // Can be called only once, already up
+
+  bool ok = true;
 
   const int bitrate = 250000;
 
@@ -486,6 +512,7 @@ void tNMEA2000_STM32X::begin()
 #if defined(STMCANDEBUG)
     Serial.println("HAL_FDCAN_Init Error");
 #endif
+    ok = false;
   }
 
   started_ = true;
@@ -496,19 +523,22 @@ void tNMEA2000_STM32X::begin()
 #if defined(STMCANDEBUG)
     Serial.println("HAL_FDCAN_Start Error");
 #endif
+    ok = false;
   }
 
   subscribe();
 
+  return ok;
+
 #else // bxCAN ---------------------------------------------------------------
   if (_canIsActive)
-    return;
+    return true; // already up
 
   auto instance = getPeripheral();
   if (instance == NP)
-    return;
+    return false; // invalid/unsupported rx/tx pin combination
   if (!allocatePeripheral(instance))
-    return;
+    return false; // peripheral already claimed by another instance
   _canIsActive = true;
 
   // Configure RX pin with pull-up
@@ -564,6 +594,7 @@ void tNMEA2000_STM32X::begin()
 
   filtersInitialized = false;
   setBaudRate(baudrate);
+  return true;
 #endif // STM32X_USE_FDCAN / STM32X_USE_BXCAN
 }
 
